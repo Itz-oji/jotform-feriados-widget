@@ -1,0 +1,132 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Feriados Widget</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 10px; }
+    .box { border: 1px solid #ddd; border-radius: 10px; padding: 10px; }
+    .muted { opacity: .75; font-size: 12px; }
+    ul { margin: 8px 0 0 18px; padding: 0; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div><b>Feriados en tu selección:</b> <span id="count">—</span></div>
+    <div class="muted" id="status">Esperando fechas…</div>
+    <div id="listWrap" style="display:none;">
+      <ul id="list"></ul>
+    </div>
+  </div>
+
+  <!-- Librería oficial de comunicación de widgets -->
+  <script src="https://js.jotform.com/JotFormCustomWidgets.min.js"></script>
+  <script>
+    const COUNTRY = "CL";
+
+    const $count = document.getElementById("count");
+    const $status = document.getElementById("status");
+    const $listWrap = document.getElementById("listWrap");
+    const $list = document.getElementById("list");
+
+    function toISODate(d) {
+      // d: "YYYY-MM-DD" esperado (Jotform Date puede variar según config)
+      return d;
+    }
+
+    function parseISO(s) {
+      // s: "YYYY-MM-DD"
+      const [y,m,dd] = s.split("-").map(Number);
+      return new Date(y, m-1, dd);
+    }
+
+    function inRange(dateISO, startISO, endISO) {
+      const d = parseISO(dateISO).getTime();
+      const a = parseISO(startISO).getTime();
+      const b = parseISO(endISO).getTime();
+      return d >= a && d <= b;
+    }
+
+    async function fetchHolidays(year) {
+      const url = `https://date.nager.at/api/v3/PublicHolidays/${year}/${COUNTRY}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("No se pudo consultar feriados");
+      return await res.json(); // [{ date, localName, name, ... }]
+    }
+
+    async function computeAndSend(startISO, endISO) {
+      if (!startISO || !endISO) {
+        $count.textContent = "—";
+        $status.textContent = "Selecciona fecha inicio y término.";
+        $listWrap.style.display = "none";
+        // manda vacío
+        JFCustomWidget.sendData({ value: JSON.stringify({ feriados_count: "", feriados_lista: "" }) });
+        return;
+      }
+
+      // Si vienen al revés, los ordenamos
+      if (parseISO(startISO) > parseISO(endISO)) {
+        [startISO, endISO] = [endISO, startISO];
+      }
+
+      const years = new Set([parseISO(startISO).getFullYear(), parseISO(endISO).getFullYear()]);
+      $status.textContent = "Consultando feriados…";
+
+      try {
+        let holidays = [];
+        for (const y of years) {
+          holidays = holidays.concat(await fetchHolidays(y));
+        }
+
+        const hits = holidays.filter(h => inRange(h.date, startISO, endISO));
+        $count.textContent = hits.length.toString();
+
+        // Render lista
+        $list.innerHTML = "";
+        if (hits.length) {
+          hits.sort((a,b)=> a.date.localeCompare(b.date));
+          for (const h of hits) {
+            const li = document.createElement("li");
+            li.textContent = `${h.date} — ${h.localName || h.name}`;
+            $list.appendChild(li);
+          }
+          $listWrap.style.display = "block";
+          $status.textContent = `Rango: ${startISO} a ${endISO}`;
+        } else {
+          $listWrap.style.display = "none";
+          $status.textContent = `No hay feriados entre ${startISO} y ${endISO}`;
+        }
+
+        // Enviar al formulario:
+        // OJO: aquí mandamos un JSON con claves.
+        // Luego en Jotform mapeas este "value" a tus campos (según configuración del widget).
+        JFCustomWidget.sendData({
+          value: JSON.stringify({
+            feriados_count: hits.length,
+            feriados_lista: hits.map(h => `${h.date} - ${h.localName || h.name}`).join("\n")
+          })
+        });
+
+      } catch (e) {
+        $count.textContent = "—";
+        $status.textContent = "Error consultando feriados (revisa conexión/API).";
+        $listWrap.style.display = "none";
+      }
+    }
+
+    // Conexión con el formulario
+    JFCustomWidget.subscribe("ready", function() {
+      $status.textContent = "Listo. Cambia las fechas para calcular.";
+    });
+
+    // Recibir datos del form (cuando cambien campos)
+    JFCustomWidget.subscribe("formData", function(data) {
+      // data normalmente trae los valores de los campos.
+      // Aquí hay variaciones según Jotform; lo más práctico es imprimir data al inicio si necesitas.
+      const startISO = data && data.value && data.value.fecha_inicio;
+      const endISO   = data && data.value && data.value.fecha_termino;
+      computeAndSend(startISO, endISO);
+    });
+  </script>
+</body>
+</html>
