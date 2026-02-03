@@ -1,107 +1,46 @@
-<script>
-  const COUNTRY = "CL";
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Día de hoy</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: transparent;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+    .day {
+      height: 100%;
+      display: grid;
+      place-items: center;
+      font-size: clamp(48px, 18vw, 160px);
+      font-weight: 800;
+      line-height: 1;
+      color: #111;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="day" class="day">--</div>
 
-  const $count = document.getElementById("count");
-  const $status = document.getElementById("status");
-  const $listWrap = document.getElementById("listWrap");
-  const $list = document.getElementById("list");
+  <script>
+    // Zona horaria Chile continental
+    const TZ = "America/Santiago";
 
-  // Cambia este nombre si tu URL param se llama distinto:
-  const START_PARAM = "escribaUna34"; // <-- tu parámetro
+    function getDayInTZ(timeZone) {
+      // Obtiene el día del mes como número (sin ceros a la izquierda)
+      const parts = new Intl.DateTimeFormat("es-CL", {
+        timeZone,
+        day: "numeric"
+      }).formatToParts(new Date());
 
-  function parseAnyDate(str) {
-    if (!str) return null;
-
-    // YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-      const [y, m, d] = str.split("-").map(Number);
-      return new Date(y, m - 1, d);
+      return parts.find(p => p.type === "day")?.value ?? "";
     }
 
-    // DD/MM/YYYY
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
-      const [d, m, y] = str.split("/").map(Number);
-      return new Date(y, m - 1, d);
-    }
-
-    return null;
-  }
-
-  async function fetchHolidays(year) {
-    const url = `https://date.nager.at/api/v3/PublicHolidays/${year}/${COUNTRY}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("No se pudo consultar feriados");
-    return await res.json();
-  }
-
-  function sameMonth(dateObj, year, monthIndex0) {
-    return (
-      dateObj &&
-      dateObj.getFullYear() === year &&
-      dateObj.getMonth() === monthIndex0
-    );
-  }
-
-  async function computeFromStartDate(startStr) {
-    const startDate = parseAnyDate(startStr);
-
-    if (!startDate) {
-      $count.textContent = "—";
-      $status.textContent = "Falta o es inválida la fecha de inicio (URL param).";
-      $listWrap.style.display = "none";
-      return;
-    }
-
-    const year = startDate.getFullYear();
-    const month = startDate.getMonth(); // 0-11
-
-    $status.textContent = `Consultando feriados de ${String(month + 1).padStart(2,"0")}/${year}…`;
-
-    try {
-      const holidays = await fetchHolidays(year);
-
-      // Filtra feriados del mismo mes
-      const hits = holidays.filter(h => {
-        const d = parseAnyDate(h.date); // h.date viene YYYY-MM-DD
-        return sameMonth(d, year, month);
-      });
-
-      $count.textContent = hits.length.toString();
-
-      // Render lista
-      $list.innerHTML = "";
-      if (hits.length) {
-        hits.sort((a,b)=> a.date.localeCompare(b.date));
-        for (const h of hits) {
-          const li = document.createElement("li");
-          li.textContent = `${h.date} — ${h.localName || h.name}`;
-          $list.appendChild(li);
-        }
-        $listWrap.style.display = "block";
-        $status.textContent = `Feriados del mes ${String(month + 1).padStart(2,"0")}/${year} (según inicio: ${startStr})`;
-      } else {
-        $listWrap.style.display = "none";
-        $status.textContent = `No hay feriados en ${String(month + 1).padStart(2,"0")}/${year}`;
-      }
-
-    } catch (e) {
-      $count.textContent = "—";
-      $status.textContent = "Error consultando feriados (API o conexión).";
-      $listWrap.style.display = "none";
-    }
-  }
-
-  function readStartFromUrl() {
-    const params = new URLSearchParams(window.location.search);
-    return params.get(START_PARAM) || params.get("start") || "";
-  }
-
-  // Ejecuta al cargar
-  const startStr = readStartFromUrl();
-  if (!startStr) {
-    $status.textContent = `Esperando fecha… (usa ?${START_PARAM}=YYYY-MM-DD)`;
-  } else {
-    computeFromStartDate(startStr);
-  }
-</script>
-
+    document.getElementById("day").textContent = getDayInTZ(TZ);
+  </script>
+</body>
+</html>
